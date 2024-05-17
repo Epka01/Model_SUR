@@ -1,0 +1,365 @@
+---
+title: "Analiza Wielowymiarowa"
+author: "Ewelina Nieć"
+date: "2024-03-23"
+output: 
+  html_document:
+    code_folding: hide
+    theme: cerulean
+---
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+library(readr)
+library(dplyr)
+```
+
+Projekt ten skupia się na analizie wielowymiarowej w kontekście rynku finansowego. Celem jest zastosowanie modelu SUR (Seemingly Unrelated Regressions) do analizy stóp zwrotu branżowych portfeli inwestycyjnych.
+
+**Uwaga:** Przyjęty poziom istotności wynosi α = 5%. 
+
+## Wczytywanie danych
+Najpierw dokonano wczytania danych dotyczących stóp zwrotu różnych branżowych portfeli inwestycyjnych, stopy zwrotu portfela rynkowego (WIGu) oraz stopy wolnej od ryzyka. Dane te są zaprezentowane w formie tabeli.
+```{r message=FALSE, warning=FALSE}
+wig <- read_csv("Dane/wig_m.csv")
+wig <- wig[,c(1,5)]
+colnames(wig) <- c('data','wig')
+
+wig_banki <- read_csv("Dane/wig_banki_m.csv")
+wig_banki <- wig_banki[,5]
+colnames(wig_banki) <- c('wig_banki')
+
+wig_budow <- read_csv("Dane/wig_budow_m.csv")
+wig_budow <- wig_budow[,5]
+colnames(wig_budow) <- c('wig_budow')
+
+wig_chemia <- read_csv("Dane/wig_chemia_m.csv")
+wig_chemia <- wig_chemia[,5]
+colnames(wig_chemia) <- c('wig_chemia')
+
+wig_energia <- read_csv("Dane/wig_energ_m.csv")
+wig_energia <- wig_energia[,5]
+colnames(wig_energia) <- c('wig_energia')
+
+wig_gornic <- read_csv("Dane/wig_gornic_m.csv")
+wig_gornic <- wig_gornic[,5]
+colnames(wig_gornic) <- c('wig_gornic')
+
+wig_gry <- read_csv("Dane/wig_gry_m.csv")
+wig_gry <- wig_gry[,5]
+colnames(wig_gry) <- c('wig_gry')
+
+wig_info <- read_csv("Dane/wig_info_m.csv")
+wig_info <- wig_info[,5]
+colnames(wig_info) <- c('wig_info')
+
+wig_leki <- read_csv("Dane/wig_leki_m.csv")
+wig_leki <- wig_leki[,5]
+colnames(wig_leki) <- c('wig_leki')
+
+wig_media <- read_csv("Dane/wig_media_m.csv")
+wig_media <- wig_media[,5]
+colnames(wig_media) <- c('wig_media')
+
+wig_moto <- read_csv("Dane/wig_moto_m.csv")
+wig_moto <- wig_moto[,5]
+colnames(wig_moto) <- c('wig_moto')
+
+wig_nrchom <- read_csv("Dane/wig_nrchom_m.csv")
+wig_nrchom <- wig_nrchom[,5]
+colnames(wig_nrchom) <- c('wig_nrchom')
+
+wig_odziez <- read_csv("Dane/wig_odziez_m.csv")
+wig_odziez <- wig_odziez[,5]
+colnames(wig_odziez) <- c('wig_odziez')
+
+wig_paliwa <- read_csv("Dane/wig_paliwa_m.csv")
+wig_paliwa <- wig_paliwa[,5]
+colnames(wig_paliwa) <- c('wig_paliwa')
+
+wig_spozyw <- read_csv("Dane/wig_spozyw_m.csv")
+wig_spozyw <- wig_spozyw[,5]
+colnames(wig_spozyw) <- c('wig_spozyw')
+
+stopa_wolna <- read_csv("Dane/10yply_b_m.csv")
+stopa_wolna <- stopa_wolna[,5]/100
+colnames(stopa_wolna) <- c('stopa_wolna')
+
+dane <- data.frame(wig,wig_banki,wig_budow,wig_chemia,
+                   wig_energia,wig_gornic,wig_gry,wig_info,
+                   wig_leki,wig_media,wig_moto,wig_nrchom,
+                   wig_odziez,wig_paliwa,wig_spozyw,stopa_wolna/12)
+
+knitr::kable(head(dane), align = "cccccccc")
+```
+
+## Stopy zwrotu
+Kolejnym krokiem jest wyznaczenie stóp zwrotu dla poszczególnych portfeli, według wzoru:
+
+$$R_l = \frac{P_t - P_{t-1}}{P_{t-1}}$$
+
+gdzie:  
+
+ * $R_l$ - stopa zwrotu,  
+ * $P_t$ - wartość zamknięcia indeksu w czasie t,  
+ * $P_{t−1}$ - wartość zamknięcia indeksu w czasie t-1,      
+
+
+```{r}
+stopa_zwrotu <- data.frame(matrix(0, 86, 17))
+stopa_zwrotu[, 1] <- dane[, 1]
+for (j in 2:17){
+  for (i in 2:86)
+  {
+  stopa_zwrotu[i, j] <- (dane[i, j] - dane[i-1, j])/dane[i-1, j]
+  }
+}
+names(stopa_zwrotu) <- names(dane)
+rownames(stopa_zwrotu) <- NULL    
+stopa_zwrotu <- stopa_zwrotu[-1, ]
+
+knitr::kable(head(stopa_zwrotu), align = "cccccccc",  digits = 3)
+```
+
+# Model SUR
+
+Model SUR (Seemingly Unrelated Regressions) stanowi rozszerzenie modelu regresji liniowej, w którym uwzględnia się kilka równań regresji. Każde z tych równań posiada swoją własną zmienną zależną oraz potencjalnie różne zestawy zmiennych objaśniających. Co istotne, każde równanie jest osobnym, samodzielnym modelem regresji liniowej, które można oszacować niezależnie. 
+
+
+W ramach projektu został wykorzystany model CAMP (Capital Asset Pricing Model), który jest jednoczynnikowym modelem wykorzystywanym do wyceny instrumentów finansowych.
+
+Model opisuje równanie regresji:   
+
+$$R_{it} - r_{ft} = \alpha_i + \beta_i(R_{Mt} - r_{ft}) + \epsilon_it$$    
+
+gdzie:    
+
+$R_{it}$ - stopa zwrotu i-tego portfela w czasie t (indeksu branżowego),   
+$R_{Mt}$ - stopa zwrotu portfela rynkowego (WIGu),   
+$r_{ft}$ - stopa zwrotu wolna od ryzyka,   
+$\alpha_i, \beta_i$ - parametry strukturalne modelu regresji,   
+$\epsilon_it$ - zakłócenia losowe.  
+
+
+Zmiennymi w danym modelu będą stopy zwrotu pomniejszone o stopę wolną od ryzyka, dlatego takie przekształcenie zostalo wykonane
+
+```{r}
+zmienne <- data.frame(matrix(0, 85, 16))
+names(zmienne) <- names(dane)[c(1:16)]
+zmienne[, 1] <- stopa_zwrotu[, 1]
+
+for (j in 2:16){
+  for (i in 1:85)
+  {
+    zmienne[i, j] <- stopa_zwrotu[i, j] - stopa_zwrotu[i, 17]
+  }
+}
+
+zmienne <- zmienne[, -1]
+```
+
+W modelu wyestymowano każde równanie osobno za pomocą MNK   
+
+```{r}
+mnk <- list(lm(zmienne$wig_banki ~ zmienne$wig),
+            lm(zmienne$wig_budow ~ zmienne$wig),
+            lm(zmienne$wig_chemia ~ zmienne$wig),
+            lm(zmienne$wig_energia ~ zmienne$wig),
+            lm(zmienne$wig_gornic ~ zmienne$wig),
+            lm(zmienne$wig_gry ~ zmienne$wig),
+            lm(zmienne$wig_info ~ zmienne$wig),
+            lm(zmienne$wig_leki ~ zmienne$wig),
+            lm(zmienne$wig_media ~ zmienne$wig),
+            lm(zmienne$wig_moto ~ zmienne$wig),
+            lm(zmienne$wig_nrchom ~ zmienne$wig),
+            lm(zmienne$wig_odziez ~ zmienne$wig),
+            lm(zmienne$wig_paliwa ~ zmienne$wig),
+            lm(zmienne$wig_spozyw ~ zmienne$wig))
+```
+
+Wyciągnięto wartości alfa i beta z modelu
+```{r}
+alfa <-c()
+for (i in 1:length(mnk)) {
+  alfa[i] <- mnk[[i]]$coefficients[1]
+} 
+
+beta <-c()
+for (i in 1:length(mnk)) {
+  beta[i] <- mnk[[i]]$coefficients[2]
+}
+alfa_beta <- data.frame("alfa" = alfa, "beta" = beta, row.names = names(zmienne)[-1])
+knitr::kable(alfa_beta, align = "cccc")
+```
+
+Wartość $\beta$ określa, jak mocno stopy zwrotu danego portfela reagują na zmiany w stopy zwrotu portfela rynkowego. Na przykład, dla branży "wig_banki" wartość $\beta$ wynosi 0.9867479, co oznacza, że średnio stopy zwrotu z inwestycji w tę branżę reagują na zmiany stopy zwrotu portfela rynkowego zgodnie z około 98.67% intensywnością.
+
+Wykres przedstawiający zależność między średnimi z portfeli, a betami:
+```{r}
+srednie_portfeli <- colMeans(zmienne[,-15])
+beta <- alfa_beta$beta
+trend_model <- lm(beta ~ srednie_portfeli)
+
+plot(srednie_portfeli, beta, 
+     xlab = "Średnie z portfeli", 
+     ylab = "Wartość beta", 
+     main = "Zależność między średnimi z portfeli a betami", 
+     col = "darkgreen", 
+     pch = 16)
+
+# Dodanie linii trendu
+abline(trend_model, col = "red")
+```
+
+Linia trendu jest prawie stała, a wyznaczone punkty są rozproszone, oznacza to, że istnieje niewielka lub brak zależności między średnimi z portfeli a wartościami beta.
+
+
+# Weryfikacja modelu
+
+## Istotność poszczególnych zmiennych
+
+Za pomocą testu t sprawdzono istnotność poszczególnych zmiennych. 
+
+*H0: zmienna jest nieistotna*  
+*H1: zmienna jest istotna*  
+
+Tabela przedstawia otrzymane wartości p-value.  
+
+```{r}
+p_alpha0 <- c()
+p_alpha1 <- c() 
+
+p_alpha0[10] = summary(mnk[[10]])$coefficients[1,4]
+
+for(i in 1:length(mnk)){
+  p_alpha0[i] = summary(mnk[[i]])$coefficients[1,4]
+  p_alpha1[i] = summary(mnk[[i]])$coefficients[2,4]
+}
+
+p_value <- data.frame(indeksy = (colnames(zmienne)[-1]), p_value_a0 = p_alpha0, p_value_a1 = p_alpha1)
+knitr::kable(p_value, align = "cccc")
+```
+
+Analizując powyższą tabelę, zauważono, że prawie wszystkie wartości p p-value dla wyrazów wolnych w poszczególnych równaniach są większe niż 0.05. Wynika z tego, że nie mamy podstaw do odrzucenia hipotezy zerowej (H0), co sugeruje, że te wyrazy są nieistotne.
+
+Aby dalej zweryfikować, czy wszystkie wyrazy wolne w modelu są łącznie nieistotne, przeprowadzono test restrykcji znany jako test GRS (Gibbons, Ross, Shanken). W celu przeprowadzenia tego testu konieczne jest wyznaczenie reszt oraz ich macierzy wariancji-kowariancji z naszego modelu.
+
+```{r}
+reszty <- matrix(NA, nrow(zmienne), ncol(zmienne)-1)
+
+for(i in 1:nrow(reszty)){
+  for(j in 1:length(mnk)){
+    reszty[i,j] <- mnk[[j]]$residuals[i]
+  }
+}
+
+MacierzReszt <- data.frame(reszty)
+```
+
+## Test restrykcji GRS 
+
+Test GRS umożliwia sprawdzenie, czy wyrazy wolne z modeli regresji są statystycznie łącznie różne od zera w ramach grupy portfeli, a zatem hipotezy testu przedstawiają się w sposób następujący:
+
+
+ *H0: * $\alpha_i = 0$
+ 
+ *H1: * $\alpha_i \neq 0$ dla $i = 1, 2, ..., N$
+ 
+Statystykę GRS natomiast prezentuje wzór:
+
+$$GRS = (\frac{T}{N})(\frac{T-N-K}{T-K-1})(\frac{\hat\alpha^T\hat\Sigma^{-1}\hat\alpha}{1+\hat\mu^T\hat{V}^{-1}\hat\mu})$$
+gdzie:
+
+$T$ - liczebność próby (85), 
+
+$N$ - liczba portfeli objaśnianych w badanej grupie (14),  
+
+$K$- liczba czynników ryzyka (objaśniających) (1), 
+
+$\hat\alpha_i$ - wektor wyrazów wolnych z regresji,  
+
+$\hat\Sigma$ - estymator macierzy wariancji-kowariancji składników losowych,  
+
+$\hat\mu$ - średnia czynnika ryzyka (WIGu),
+
+$\hat{V}$ - wariancja czynnika ryzyka (WIGu).  
+  
+Statystyka ma rozkład Fishera z oraz $N$ oraz $T - N - K$ stopniami swobody.  
+
+```{r}
+SIGMA <- cov(MacierzReszt)
+VarianceWIG <- var(zmienne[, -1])
+MeanWIG <- colMeans(zmienne[, -1])
+
+T <- nrow(zmienne) 
+N <- ncol(zmienne) - 1 
+K <- 1 
+
+GRS <- (T/N)*((T-N-K)/(T-K-1)) *
+  (t(alfa)%*%(SIGMA)^(-1)%*%alfa)/((1+t(MeanWIG)%*%(VarianceWIG)^(-1)%*%MeanWIG))
+Fkryt = qf(0.95, N, T-N-K)
+```
+
+Uzyskane wyniki statystyk:  
+
+```{r, fig.align="center"}
+grs <- data.frame(Wartosc_GRS = GRS, Wartosc_krytyczna = Fkryt)
+knitr::kable(grs, align = "cc")
+```
+
+Uzyskana wartość statystyki GRS jest mniejsza od wartości krytycznej, zatem nie istnieją podstawy do odrzucenia hipotezy zerowej testu - wektor $\alpha_i$ parametrów jest nieistotny.
+
+
+## UMNK
+
+Jest to technika, która dąży do minimalizacji sumy kwadratów różnic między wartościami obserwowanymi a wartościami przewidywanymi przez model. 
+
+
+Wyestymowno parametry ${\beta}$ metodą UMNK
+
+$$\hat{\beta}_{UMNK} = (X^T \Sigma^{-1} X)^{-1} X^T \Sigma^{-1} Y$$
+
+Gdzie:
+
+$\hat{\beta}_{UMNK}$ - oznacza estymator UMNK dla wektora parametrów,
+
+$X$ to macierz zmiennych objaśniających,
+
+$\Sigma$ to macierz korelacji zmiennych objaśniających,
+
+$Y$ to wektor zmiennej objaśnianej.
+
+```{r}
+X <- as.matrix(zmienne[,-1])
+Y <- as.matrix(zmienne[,1])
+Sigma <- cor(X)
+# macierz odwrotna do sigmy
+Sigma_odw <- solve(Sigma)
+beta_UMNK <- (t(X)%*%X%*%Sigma_odw)^(-1) %*% (t(X%*%Sigma_odw)%*%Y)
+knitr::kable(beta_UMNK, align = "cccc")
+```
+
+Wykres przedstawiający zależność między średnimi z portfeli, a betami:
+```{r}
+srednie_portfeli <- colMeans(zmienne[,-15])
+beta <- beta_UMNK
+trend_model <- lm(beta ~ srednie_portfeli)
+
+plot(srednie_portfeli, beta, 
+     xlab = "Średnie z portfeli", 
+     ylab = "Wartość beta", 
+     main = "Zależność między średnimi z portfeli a betami", 
+     col = "darkgreen", 
+     pch = 16)
+
+# Dodanie linii trendu
+abline(trend_model, col = "red")
+```
+
+
+
+
+
+
+
+
+
